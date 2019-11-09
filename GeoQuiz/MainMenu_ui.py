@@ -31,9 +31,6 @@ class Ui_MainMenu(object):
         self.pushButton_start.setSizePolicy(sizePolicy)
         self.pushButton_start.setObjectName("pushButton_start")
         self.verticalLayout.addWidget(self.pushButton_start)
-        self.pushButton_sets = QtWidgets.QPushButton(self.verticalLayoutWidget)
-        self.pushButton_sets.setObjectName("pushButton_sets")
-        self.verticalLayout.addWidget(self.pushButton_sets)
         self.pushButton_stats = QtWidgets.QPushButton(self.verticalLayoutWidget)
         self.pushButton_stats.setObjectName("pushButton_stats")
         self.verticalLayout.addWidget(self.pushButton_stats)
@@ -58,6 +55,5 @@ class Ui_MainMenu(object):
         _translate = QtCore.QCoreApplication.translate
         MainMenu.setWindowTitle(_translate("MainMenu", "Географический тест"))
         self.pushButton_start.setText(_translate("MainMenu", "Запустить тест"))
-        self.pushButton_sets.setText(_translate("MainMenu", "Настройки"))
         self.pushButton_stats.setText(_translate("MainMenu", "Статистика"))
         self.pushButton_exit.setText(_translate("MainMenu", "Выйти"))

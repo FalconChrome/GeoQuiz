@@ -1,17 +1,27 @@
 import sys
 import sqlite3
 from random import sample, randint
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QAction
 from PyQt5.QtWidgets import QWidget, QRadioButton, QLabel, QMessageBox
-from Quiz_ui import Ui_MainWindow
-from MainMenu_ui import Ui_MainMenu
+from PyQt5.QtWidgets import QPushButton
+from Quiz_ui import Ui_MainWindow, Ui_MainMenu, Ui_InfWindow
 
 INIT_POS = [400, 200]
 SCREEN_SIZE = [800, 600]
 IMAGES = 'images/'
-STATS = 'statistics'
+STATS = '.statistics'
+
+
+def get_stats():
+    with open(STATS) as stat_f:
+        stat_data = stat_f.read().splitlines()
+    return stat_data
+
+
+def set_stats(stat_data):
+    with open(STATS, 'w') as stat_f:
+        stat_f.write('\n'.join(stat_data))
 
 
 class QuMainMenu(Ui_MainMenu, QMainWindow):
@@ -23,9 +33,18 @@ class QuMainMenu(Ui_MainMenu, QMainWindow):
     def initUi(self):
         self.setGeometry(*INIT_POS, *SCREEN_SIZE)
 
+        self.check_stats()
+
         self.pushButton_start.clicked.connect(self.start)
         self.pushButton_stats.clicked.connect(self.stats)
         self.pushButton_exit.clicked.connect(self.exit_ask)
+
+    def check_stats(self):
+        try:
+            open(STATS)
+        except FileNotFoundError:
+            with open(STATS, 'w') as stat_f:
+                stat_f.write('0\n0')
 
     def exit_ask(self):
         reply = QMessageBox.question(self, '',
@@ -40,32 +59,36 @@ class QuMainMenu(Ui_MainMenu, QMainWindow):
         self.close()
 
     def stats(self):
-        stat_window = Stats()
-        stat_window.show()
+        self.stat_window = Stats()
+        self.stat_window.show()
             
 
-class Stats(QWidget):
+class Stats(Ui_InfWindow, QWidget):
     def __init__(self):
         super().__init__()
+        self.setupUi(self)
         self.initUi()
 
     def initUi(self):
-        self.setGeometry(*INIT_POS, 400, 400)
+        self.setGeometry(INIT_POS[0] + 50, INIT_POS[1] + 50, *SCREEN_SIZE)
 
         self.pushButton_back = QPushButton('<--Назад', self)
         self.pushButton_back.resize(self.pushButton_back.sizeHint())
-        self.pushButton_back.move(20, 30)
+        self.pushButton_back.move(40, 30)
         self.pushButton_back.clicked.connect(self.close)
         
-        self.label_st = (self)
+        self.label_st = QLabel(self)
+        self.label_st.move(50, 100)
         self.show_stats()
         self.label_st.resize(self.label_st.sizeHint())
+        print("Init Ends")
 
     def show_stats(self):
-        with open(STATS) as stat_f:
-            stat_data = stat_f.read().splitlines()
-        self.label_st.setText(f"Общее число тестов: {stat_data[0]}\nCредний" +
-                              f"процент выполнения: {stat_data[1] * 100}%")
+        stat_data = get_stats()
+        print("Filling label")
+        self.label_st.setText(f"Общее число тестов: {stat_data[0]}\nCредний "
+                              f"процент выполнения:"
+                              f"{stat_data[1]}%")
         
 
 class Quiz(Ui_MainWindow, QMainWindow):
@@ -85,41 +108,29 @@ class Quiz(Ui_MainWindow, QMainWindow):
         self.var_n = self.cur.execute("""SELECT seq FROM sqlite_sequence
         WHERE name = 'vars'""").fetchall()[0][0]
 
-        self.check_stats()
 
         self.restart()
         self.pushButton_next.clicked.connect(self.next_q)
 
-    def exit_safe(self):
-        exit_will = QMessageBox.question(self, '',
-                                         "Выйти без сохранения",
-                                         QMessageBox.Yes, QMessageBox.No)
-        if retry == QMessageBox.Yes:
-            self.show_result()
-            self.restart()
-            return True
-        else:
-            return False
+    def __del__(self):
+        self.con.close()
 
-        
     def closeEvent(self, event):
-        if self.:
+        exit_will = QMessageBox.question(self, '',
+                                         "Хотите узнать результат "
+                                         "перед выходом?",
+                                         QMessageBox.Yes, QMessageBox.No,
+                                         QMessageBox.Cancel)
+        if exit_will == QMessageBox.Yes:
+            self.show_result()
+            self.save_stats()
+            super(Quiz, self).closeEvent(event)
+        elif exit_will == QMessageBox.No:
             super(Quiz, self).closeEvent(event)
         else:
             event.ignore()
 
-    def __del__(self):
-        self.con.close()
-
-    def check_stats(self):
-        try:
-            open(STATS)
-        except FileNotFoundError:
-            with open(STATS, 'w') as stat_f:
-                stat_f.write('0\n0')
-
     def ans_button(self, i):
-        # Функция для удобной индексации кнопок
         if i > 2:
             if i > 3:
                 return self.radioButton_4
@@ -129,6 +140,12 @@ class Quiz(Ui_MainWindow, QMainWindow):
             return self.radioButton_2
         else:
             return self.radioButton_1
+
+    def save_stats(self):
+        stat_data = [int for i in get_stats()]
+        if self.n == 0:
+            stat_data[1] += 1
+            stat_data[0] = round(self.score / self.q_num * 100, 2)
 
     def restart(self):
         self.seq = sample(range(1, self.tasks_n + 1), self.tasks_n)
@@ -147,23 +164,13 @@ class Quiz(Ui_MainWindow, QMainWindow):
     def show_result(self):
         self.show_res_widget = ShowResult(self.score, self.q_num)
         self.show_res_widget.show()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape:
-            self.back_to_MainMenu()
-
-    def back_to_MainMenu(self):
-        self.show_res_widget = ShowResult(self.score, self.q_num)
-        self.show_res_widget.show()
-        self.exit_safe()
-
+        self.save_stats()
 
     def end(self):
         retry = QMessageBox.question(self, '',
-                                     "Все задания теста пройдены.\n"
-                                     "Хотите узнать результат и "
-                                     "начать заново?",
-                                     QMessageBox.Yes, QMessageBox.No)
+                            "Все задания теста пройдены.\n" +
+                            "Хотите узнать результат и начать заново?",
+                            QMessageBox.Yes, QMessageBox.No)
         if retry == QMessageBox.Yes:
             self.show_result()
             self.restart()
@@ -176,7 +183,7 @@ class Quiz(Ui_MainWindow, QMainWindow):
         potential_var_ids.remove(true_id)
         false_var_ids = tuple(sample(potential_var_ids, 3))
         return self.cur.execute(f"""SELECT var FROM vars
-            WHERE id IN {false_var_ids}""").fetchall()
+                        WHERE id IN {false_var_ids}""").fetchall()
 
     def next_q(self):
         for i in range(1, 5):
@@ -200,14 +207,14 @@ class Quiz(Ui_MainWindow, QMainWindow):
             print(self.seq)
 
         im_name, true_id = self.cur.execute(f"""SELECT image, "true" FROM tasks
-            WHERE id = {self.seq[self.i]}""").fetchall()[0]
+        WHERE id = {self.seq[self.i]}""").fetchall()[0]
         print(im_name)
         self.set_image(im_name)
 
         false_vars = self.gen_false_vars(true_id)
         print(false_vars)
         true_var = self.cur.execute(f"""SELECT var FROM vars
-            WHERE id = {true_id}""").fetchall()[0][0]
+        WHERE id = {true_id}""").fetchall()[0][0]
 
         self.answer = randint(1, 4)
         print(self.answer)
@@ -225,16 +232,18 @@ class Quiz(Ui_MainWindow, QMainWindow):
         self.q_num += 1
 
 
-class ShowResult(QWidget):
+class ShowResult(Ui_InfWindow, QWidget):
     def __init__(self, *res):
         super().__init__()
+        self.setupUi(self)
         self.initUi(res)
 
     def initUi(self, res):
-        self.setGeometry(500, 300, 200, 200)
+        self.setGeometry(500, 300, *SCREEN_SIZE)
 
         self.label = QLabel(self)
-        self.label.setText("Ваш результат {} из {}.".format(*res))
+        self.label.setText("Поздраляем!\n Ваш результат " +
+                           "{} из {}.".format(*res))
 
 
 if __name__ == '__main__':
