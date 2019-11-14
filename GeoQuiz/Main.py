@@ -17,6 +17,8 @@ STATS = '.statistics'
 def get_stats():
     with open(STATS) as stat_f:
         stat_data = stat_f.read().splitlines()
+    stat_data[0] = int(stat_data[0])
+    stat_data[1] = float(stat_data[1])
     return stat_data
 
 
@@ -62,7 +64,7 @@ class QuMainMenu(Ui_MainMenu, QMainWindow):
     def start(self):
         self.quiz = Quiz(self.show)
         self.quiz.show()
-        self.hide()
+        self.close()
 
     def stats(self):
         self.stat_window = Stats()
@@ -98,8 +100,7 @@ class Stats(Ui_InfWindow, QWidget):
     def show_stats(self):
         stat_data = get_stats()
         self.label_st.setText(f"Общее число тестов: {stat_data[0]}\nCредний "
-                              f"процент выполнения:"
-                              f"{stat_data[1]}%")
+                              f"процент выполнения: {round(stat_data[1], 2)}%")
 
     def reset_stats(self):
         reset_sure = QMessageBox.question(self, '',
@@ -118,7 +119,7 @@ class Quiz(Ui_MainWindow, QMainWindow):
         self.main_menu_show = main_menu_show
 
     def initUi(self):
-        self.setGeometry(400, 200, *SCREEN_SIZE)
+        self.showFullScreen()
 
         self.safe_exit = True
 
@@ -148,8 +149,8 @@ class Quiz(Ui_MainWindow, QMainWindow):
         exit_sure = self.finish()
         if exit_sure:
             self.main_menu_show()
-            self.safe_exit = False
-            self.close()
+            self.res_widget.activateWindow()
+            self.close_hard()
 
     def finish(self):
         finish_sure = QMessageBox.question(self, '',
@@ -158,8 +159,7 @@ class Quiz(Ui_MainWindow, QMainWindow):
                                          QMessageBox.Yes | QMessageBox.No |
                                          QMessageBox.Cancel)
         if finish_sure == QMessageBox.Yes:
-            self.show_result()
-            self.save_stats()
+            self.show_result(False)
             return True
         elif finish_sure == QMessageBox.No:
             return True
@@ -176,6 +176,10 @@ class Quiz(Ui_MainWindow, QMainWindow):
             else:
                 event.ignore()
 
+    def close_hard(self):
+        self.safe_exit = False
+        self.close()
+  
     def ans_button(self, i):
         if i > 2:
             if i > 3:
@@ -188,15 +192,15 @@ class Quiz(Ui_MainWindow, QMainWindow):
             return self.radioButton_1
 
     def correct_rate(self):
-        return round(self.score / (self.q_num - 1) * 100, 2)
+        return self.score / (self.q_num - 1) * 100
 
     def save_stats(self):
-        stat_data = [int(i) for i in get_stats()]
+        stat_data = get_stats()
         if self.q_num <= 1:
             stat_data[0] += 1
         else:
-            stat_data[1] = stat_data[1] * stat_data[0] + self.correct_rate() /\
-                           (stat_data[0] + 1)
+            stat_data[1] = stat_data[1] * stat_data[0] + \
+                                 self.correct_rate() / (stat_data[0] + 1), 2
             stat_data[0] += 1
         set_stats(stat_data)
 
@@ -211,21 +215,22 @@ class Quiz(Ui_MainWindow, QMainWindow):
     def set_image(self, im_name):
         self.pixmap = QPixmap(IMAGES + im_name)
         self.label_image.setPixmap(self.pixmap)
-        
-
-    def show_result(self):
-        self.show_res_widget = ShowResult(self.score, self.q_num - 1)
-        self.show_res_widget.show()
+        #self.label_image.resize(self.label_image.sizeHint())
+      
+    def show_result(self, full):
+        self.res_widget = ResultShower(full, self.score, self.q_num - 1,
+                                       restart=self.restart,
+                                       finish_quiz=self.close_hard)
+        self.res_widget.show()
         self.save_stats()
 
     def finish_all(self):
         retry = QMessageBox.question(self, '',
                             "Все задания теста пройдены.\n" +
-                            "Хотите узнать результат и начать заново?",
+                            "Хотите узнать результат?",
                             QMessageBox.Yes, QMessageBox.No)
         if retry == QMessageBox.Yes:
-            self.show_result()
-            self.restart()
+            self.show_result(True)
             return True
         else:
             return False
@@ -263,7 +268,6 @@ class Quiz(Ui_MainWindow, QMainWindow):
         WHERE id = {true_id}""").fetchall()[0][0]
 
         self.answer = randint(1, 4)
-        print(self.answer)
 
         for i in range(1, 5):
             if i != self.answer:
@@ -276,19 +280,40 @@ class Quiz(Ui_MainWindow, QMainWindow):
         self.q_num += 1
 
 
-class ShowResult(Ui_InfWindow, QWidget):
-    def __init__(self, *res):
+class ResultShower(Ui_InfWindow, QWidget):
+    def __init__(self, full, *res, restart=None, finish_quiz=None):
         super().__init__()
         self.setupUi(self)
-        self.initUi(res)
+        self.initUi(res, full)
+        self.restart = restart
+        self.finish_quiz = finish_quiz
 
-    def initUi(self, res):
+    def initUi(self, res, full):
         self.setGeometry(500, 300, *SCREEN_SIZE)
 
         self.label = QLabel(self)
         self.label.setText("Поздраляем!\nВаш результат " +
                            "{} из {}.".format(*res))
-        self.label.move(150, 150)
+        self.label.move(190, 150)
+
+        if full:
+            self.restart_button = QPushButton("Начать заново", self)
+            self.restart_button.clicked.connect(self.restart_test)
+            self.restart_button.move(190, 280)
+
+            self.full_exit = True
+        else:
+            self.full_exit = False
+
+    def restart_test(self):
+        self.full_exit = False
+        self.close()
+        self.restart()
+
+    def closeEvent(self, event):
+        self.close()
+        if self.full_exit:
+            self.finish_quiz()
 
 
 if __name__ == '__main__':
